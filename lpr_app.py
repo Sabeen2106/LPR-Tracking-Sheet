@@ -9,6 +9,7 @@ from io import BytesIO
 # =========================
 business_unit_map = {
     "Denmark": {"Sender Name": "Denmark", "Sender Location Id": "C7734"},
+    "Denmark - Hanstholm": {"Sender Name": "Denmark - Hanstholm", "Sender Location Id": "C15390"},
     "Driffield": {"Sender Name": "Driffield", "Sender Location Id": "C6964"},
     "France": {"Sender Name": "France", "Sender Location Id": "C4094"},
     "Ireland": {"Sender Name": "Ireland", "Sender Location Id": "C6963"},
