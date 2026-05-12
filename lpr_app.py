@@ -35,35 +35,59 @@ def convert_date_to_ddmmyyyy(value):
     if pd.isna(value):
         return pd.NaT
 
-    if isinstance(value, (int, float)):
-        if value > 1000:
+    try:
+        value_str = str(value).strip()
+
+        if value_str.endswith(".0"):
+            value_str = value_str[:-2]
+
+        # Handles 20260427
+        if value_str.isdigit() and len(value_str) == 8:
+            return pd.Timestamp(
+                year=int(value_str[0:4]),
+                month=int(value_str[4:6]),
+                day=int(value_str[6:8])
+            )
+
+        # Handles 270426
+        if value_str.isdigit() and len(value_str) == 6:
+            return pd.to_datetime(value_str, format="%d%m%y", errors="coerce")
+
+        # Handles Excel serial date like 46139
+        if value_str.isdigit() and len(value_str) == 5:
             return pd.to_datetime(
-                value,
+                int(value_str),
                 unit="D",
                 origin="1899-12-30",
                 errors="coerce"
             )
 
-    value_str = str(value).strip()
+        # Handles 2026-04-27 or 2026/04/27
+        if len(value_str) >= 10:
+            date_part = value_str[:10]
 
-    if value_str.endswith(".0"):
-        value_str = value_str[:-2]
+            if "-" in date_part:
+                parts = date_part.split("-")
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    return pd.Timestamp(
+                        year=int(parts[0]),
+                        month=int(parts[1]),
+                        day=int(parts[2])
+                    )
 
-    # Handles 040226 as 04/02/2026
-    if value_str.isdigit() and len(value_str) == 6:
-        return pd.to_datetime(
-            value_str,
-            format="%d%m%y",
-            errors="coerce"
-        )
+            if "/" in date_part:
+                parts = date_part.split("/")
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    return pd.Timestamp(
+                        year=int(parts[0]),
+                        month=int(parts[1]),
+                        day=int(parts[2])
+                    )
 
-    # Handles 20260501
-    if value_str.isdigit() and len(value_str) == 8:
-        return pd.to_datetime(
-            value_str,
-            format="%Y%m%d",
-            errors="coerce"
-        )
+        return pd.to_datetime(value_str, errors="coerce", dayfirst=True)
+
+    except Exception:
+        return pd.NaT
 
     # Handles Excel serial stored as text
     if value_str.isdigit():
