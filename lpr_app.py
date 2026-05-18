@@ -17,6 +17,7 @@ business_unit_map = {
     "Netherlands": {"Sender Name": "Netherlands", "Sender Location Id": "C6960"},
     "Spain": {"Sender Name": "Spain", "Sender Location Id": "C14430"},
     "HQ": {"Sender Name": "HQ", "Sender Location Id": "C18571"}
+    "Coca-Cola HBC Northern Ireland Ltd": {"Sender Name": "Coca-Cola HBC Northern Ireland Ltd", "Sender Location Id": "16928"}
 }
 
 # =========================
