@@ -148,6 +148,21 @@ def clean_concat_part(value):
 
     value = str(value).strip()
 
+    if value.lower() in ["nan", "none"]:
+        return ""
+
+    if value.endswith(".0"):
+        value = value[:-2]
+
+    # If the value is numeric, make it 3 digits
+    # 142 becomes 0142
+    if value.isdigit():
+        value = value.zfill(3)
+
+    return value
+
+    value = str(value).strip()
+
     # Remove .0 from numbers read by Excel
     if value.endswith(".0") and value[:-2].isdigit():
         value = value[:-2]
@@ -449,12 +464,15 @@ if main_file and mapping_file:
             keep="first"
         )
 
-        work_df["Mapping Key"] = (
-            work_df["Mapping Key"]
-            .apply(clean_concat_part)
-        )
+        work_df["Mapping Key"] = ""
 
-        before_rows = len(work_df)
+        for col in selected_concat_cols:
+            work_df["Mapping Key"] = (
+            work_df["Mapping Key"].astype(str)
+            + work_df[col].apply(clean_concat_part)
+            )
+    
+         before_rows = len(work_df)
 
         work_df = work_df.merge(
             mapping_lookup,
