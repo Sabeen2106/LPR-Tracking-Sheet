@@ -142,7 +142,22 @@ def clean_reference_number(value):
 
     return value
 
+def clean_concat_part(value):
+    if pd.isna(value):
+        return ""
 
+    value = str(value).strip()
+
+    # Remove .0 from numbers read by Excel
+    if value.endswith(".0") and value[:-2].isdigit():
+        value = value[:-2]
+
+    # Preserve leading zeros for 3-digit numbers
+    if value.isdigit() and len(value) == 3:
+        value = value.zfill(4)
+
+    return value
+    
 def working_days(start, end):
     if pd.isna(start):
         return np.nan
@@ -407,13 +422,9 @@ if main_file and mapping_file:
                 work_df["Mapping Key"] = ""
 
                 for col in selected_concat_cols:
-                    work_df["Mapping Key"] += (
-                        work_df[col]
-                        .astype(str)
-                        .str.strip()
-                        .str.replace(".0", "", regex=False)
-                    )
+                      work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
 
+           
             else:
                 work_df["Mapping Key"] = (
                     work_df[existing_mapping_col]
@@ -431,12 +442,8 @@ if main_file and mapping_file:
             declaring_code_col: "Declaring Code"
         }, inplace=True)
 
-        mapping_lookup["Mapping Key"] = (
-            mapping_lookup["Mapping Key"]
-            .astype(str)
-            .str.strip()
-            .str.replace(".0", "", regex=False)
-        )
+       mapping_lookup["Mapping Key"] = mapping_lookup["Mapping Key"].apply(clean_concat_part)
+            work_df["Mapping Key"] = work_df["Mapping Key"].apply(clean_concat_part)
 
         mapping_lookup = mapping_lookup.drop_duplicates(
             subset=["Mapping Key"],
