@@ -442,8 +442,7 @@ if main_file and mapping_file:
             declaring_code_col: "Declaring Code"
         }, inplace=True)
 
-       mapping_lookup["Mapping Key"] = mapping_lookup["Mapping Key"].apply(clean_concat_part)
-       work_df["Mapping Key"] = work_df["Mapping Key"].apply(clean_concat_part)
+        mapping_lookup["Mapping Key"] = mapping_lookup["Mapping Key"].apply(clean_concat_part)
 
         mapping_lookup = mapping_lookup.drop_duplicates(
             subset=["Mapping Key"],
