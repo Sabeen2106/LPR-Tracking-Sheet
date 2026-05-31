@@ -443,7 +443,7 @@ if main_file and mapping_file:
         }, inplace=True)
 
        mapping_lookup["Mapping Key"] = mapping_lookup["Mapping Key"].apply(clean_concat_part)
-            work_df["Mapping Key"] = work_df["Mapping Key"].apply(clean_concat_part)
+       work_df["Mapping Key"] = work_df["Mapping Key"].apply(clean_concat_part)
 
         mapping_lookup = mapping_lookup.drop_duplicates(
             subset=["Mapping Key"],
@@ -452,9 +452,7 @@ if main_file and mapping_file:
 
         work_df["Mapping Key"] = (
             work_df["Mapping Key"]
-            .astype(str)
-            .str.strip()
-            .str.replace(".0", "", regex=False)
+            .apply(clean_concat_part)
         )
 
         before_rows = len(work_df)
