@@ -146,18 +146,18 @@ def clean_concat_part(value):
     if pd.isna(value):
         return ""
 
+    # If Excel/Pandas reads 005 as number 5 or 5.0
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        if float(value).is_integer():
+            return str(int(value)).zfill(3)
+
     value = str(value).strip()
 
     if value.lower() in ["nan", "none"]:
         return ""
 
-    if value.endswith(".0"):
-        value = value[:-2]
-
-    # If the value is numeric, make it 3 digits
-    # 142 becomes 0142
-    if value.isdigit():
-        value = value.zfill(3)
+    if value.endswith(".0") and value[:-2].isdigit():
+        return value[:-2].zfill(3)
 
     return value
 
@@ -463,16 +463,17 @@ if main_file and mapping_file:
             subset=["Mapping Key"],
             keep="first"
         )
+        if concatenate_required == "Yes":
+            work_df["Mapping Key"] = ""
+
+        for col in selected_concat_cols:
+            work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
 
         work_df["Mapping Key"] = ""
 
         for col in selected_concat_cols:
-            work_df["Mapping Key"] = (
-            work_df["Mapping Key"].astype(str)
-            + work_df[col].apply(clean_concat_part)
-            )
-    
-         before_rows = len(work_df)
+            work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
+        before_rows = len(work_df)
 
         work_df = work_df.merge(
             mapping_lookup,
