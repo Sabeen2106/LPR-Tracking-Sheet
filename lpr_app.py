@@ -490,8 +490,7 @@ if main_file and mapping_file:
         )     
 
         st.info(f"Rows before LPR lookup: {before_rows}")
-        st.info(f"Rows after LPR lookup: {after_rows}")
-
+        
         today = pd.Timestamp.today().normalize()
 
         work_df["Working Days Old"] = work_df["Movement Date Parsed"].apply(
