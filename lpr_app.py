@@ -388,8 +388,8 @@ if main_file and mapping_file:
         work_df = work_df[
             work_df["Quantity"] != 0
         ].copy()
-
-                if business_unit == "HQ":
+        
+        if business_unit == "HQ":
             if hq_mapping_file is None:
                 st.error("Please upload HQ Location Mapping Table.")
                 st.stop()
