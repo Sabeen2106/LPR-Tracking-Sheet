@@ -389,7 +389,7 @@ if main_file and mapping_file:
             work_df["Quantity"] != 0
         ].copy()
 
-        if business_unit == "HQ":
+                if business_unit == "HQ":
             if hq_mapping_file is None:
                 st.error("Please upload HQ Location Mapping Table.")
                 st.stop()
@@ -413,7 +413,7 @@ if main_file and mapping_file:
             ].copy()
 
             hq_lookup.rename(
-                columns={hq_mapping_return_col: "Mapping Key"},
+                columns={hq_mapping_return_col: "LPR Reporting Code"},
                 inplace=True
             )
 
@@ -428,6 +428,13 @@ if main_file and mapping_file:
                 how="left"
             )
 
+            work_df["Mapping Key"] = (
+                work_df["LPR Reporting Code"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+            )
+
         else:
             if concatenate_required == "Yes":
                 if not selected_concat_cols:
@@ -437,9 +444,8 @@ if main_file and mapping_file:
                 work_df["Mapping Key"] = ""
 
                 for col in selected_concat_cols:
-                      work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
+                    work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
 
-           
             else:
                 work_df["Mapping Key"] = (
                     work_df[existing_mapping_col]
@@ -457,31 +463,31 @@ if main_file and mapping_file:
             declaring_code_col: "Declaring Code"
         }, inplace=True)
 
-        mapping_lookup["Mapping Key"] = mapping_lookup["Mapping Key"].apply(clean_concat_part)
+        mapping_lookup["Mapping Key"] = (
+            mapping_lookup["Mapping Key"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        mapping_lookup["Declaring Code"] = (
+            mapping_lookup["Declaring Code"]
+            .astype(str)
+            .str.strip()
+        )
 
         mapping_lookup = mapping_lookup.drop_duplicates(
             subset=["Mapping Key"],
             keep="first"
         )
-        if concatenate_required == "Yes":
-            work_df["Mapping Key"] = ""
 
-        for col in selected_concat_cols:
-            work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
-
-        work_df["Mapping Key"] = ""
-
-        for col in selected_concat_cols:
-            work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
         before_rows = len(work_df)
 
         work_df = work_df.merge(
             mapping_lookup,
             on="Mapping Key",
             how="left"
-        )
-
-        after_rows = len(work_df)
+        )     
 
         st.info(f"Rows before LPR lookup: {before_rows}")
         st.info(f"Rows after LPR lookup: {after_rows}")
