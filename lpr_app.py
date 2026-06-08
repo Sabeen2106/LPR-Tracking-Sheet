@@ -294,14 +294,15 @@ if business_unit == "HQ":
         "Upload HQ Location Mapping Table",
         type=["xlsx"]
     )
-
-if main_file and mapping_file:
+if main_file:
 
     df = pd.read_excel(main_file)
-    mapping_df = pd.read_excel(mapping_file)
-
     df = clean_columns(df)
-    mapping_df = clean_columns(mapping_df)
+
+    mapping_df = None
+    if mapping_file:
+        mapping_df = pd.read_excel(mapping_file)
+        mapping_df = clean_columns(mapping_df)
 
     st.subheader("Map Main File Columns")
 
@@ -312,119 +313,117 @@ if main_file and mapping_file:
     reference_col = st.selectbox("Select column for Reference", main_columns)
     quantity_col = st.selectbox("Select column for Quantity", main_columns)
 
-    st.subheader("Create Location ID / Mapping Key")
+    st.subheader("End Location / LPR Code Mapping")
 
-    concatenate_required = st.radio(
-        "Do you want to concatenate columns to create Location ID / Mapping Key?",
-        ["Yes", "No"]
+    code_source = st.radio(
+        "Where is the LPR Declaring Code / End Location Code?",
+        [
+            "Already in Main File",
+            "Use LPR Matching Table"
+        ]
     )
 
-    selected_concat_cols = []
-
-    if concatenate_required == "Yes":
-        selected_concat_cols = st.multiselect(
-            "Select columns to concatenate in order",
+    if code_source == "Already in Main File":
+        lpr_code_col = st.selectbox(
+            "Which is your LPR code column?",
             main_columns
         )
+
     else:
-        existing_mapping_col = st.selectbox(
-            "Select existing Location ID / Mapping Key column",
-            main_columns
-        )
-
-    if business_unit == "HQ" and hq_mapping_file:
-        hq_mapping_df = pd.read_excel(hq_mapping_file)
-        hq_mapping_df = clean_columns(hq_mapping_df)
-
-        st.subheader("HQ Address Mapping")
-
-        main_address_col = st.selectbox(
-            "Select Address Line 1 column from Main File",
-            main_columns
-        )
-
-        hq_address_col = st.selectbox(
-            "Select Address1 column from HQ Mapping Table",
-            hq_mapping_df.columns.tolist()
-        )
-
-        hq_mapping_return_col = st.selectbox(
-            "Select column from HQ Mapping Table to use for LPR Matching",
-            hq_mapping_df.columns.tolist()
-        )
-
-    st.subheader("Map LPR Matching Table Columns")
-
-    mapping_key_col = st.selectbox(
-        "Select Mapping Key column in LPR Matching Table",
-        mapping_df.columns.tolist()
-    )
-
-    declaring_code_col = st.selectbox(
-        "Select LPR Declaring Code column in LPR Matching Table",
-        mapping_df.columns.tolist()
-    )
-
-    if st.button("Prepare Data"):
-
-        if not batch_number:
-            st.error("Please enter Batch Number.")
+        if mapping_df is None:
+            st.error("Please upload LPR Matching Table.")
             st.stop()
 
-        work_df = df.copy()
+        st.subheader("Create Location ID / Mapping Key")
 
-        work_df["Movement Date Parsed"] = work_df[date_col].apply(convert_date_to_ddmmyyyy)
-        work_df["Movement Date"] = work_df["Movement Date Parsed"].dt.strftime("%d/%m/%Y")
+        concatenate_required = st.radio(
+            "Do you want to concatenate columns to create Location ID / Mapping Key?",
+            ["Yes", "No"]
+        )
 
-        work_df["Receiver"] = work_df[receiver_col].astype(str).str.strip()
+        selected_concat_cols = []
 
-        work_df["Reference"] = work_df[reference_col].apply(clean_reference_number)
-
-        work_df["Quantity"] = pd.to_numeric(
-            work_df[quantity_col],
-            errors="coerce"
-        ).fillna(0)
-
-        work_df = work_df[
-            work_df["Quantity"] != 0
-        ].copy()
-        
-        if business_unit == "HQ":
-            if hq_mapping_file is None:
-                st.error("Please upload HQ Location Mapping Table.")
-                st.stop()
-
-            work_df["HQ Address Match Key"] = (
-                work_df[main_address_col]
-                .astype(str)
-                .str.strip()
-                .str.upper()
+        if concatenate_required == "Yes":
+            selected_concat_cols = st.multiselect(
+                "Select columns to concatenate in order",
+                main_columns
+            )
+        else:
+            existing_mapping_col = st.selectbox(
+                "Select existing Location ID / Mapping Key column",
+                main_columns
             )
 
-            hq_mapping_df["HQ Address Match Key"] = (
-                hq_mapping_df[hq_address_col]
+        st.subheader("Map LPR Matching Table Columns")
+
+        mapping_key_col = st.selectbox(
+            "Select Mapping Key column in LPR Matching Table",
+            mapping_df.columns.tolist()
+        )
+
+        declaring_code_col = st.selectbox(
+            "Select LPR Declaring Code column in LPR Matching Table",
+            mapping_df.columns.tolist()
+        )
+            if code_source == "Already in Main File":
+            work_df["Mapping Key"] = (
+                work_df[lpr_code_col]
                 .astype(str)
                 .str.strip()
-                .str.upper()
+                .str.replace(".0", "", regex=False)
             )
 
-            hq_lookup = hq_mapping_df[
-                ["HQ Address Match Key", hq_mapping_return_col]
+            work_df["Declaring Code"] = work_df["Mapping Key"]
+
+        else:
+            if concatenate_required == "Yes":
+                if not selected_concat_cols:
+                    st.error("Please select columns to concatenate.")
+                    st.stop()
+
+                work_df["Mapping Key"] = ""
+
+                for col in selected_concat_cols:
+                    work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
+
+            else:
+                work_df["Mapping Key"] = (
+                    work_df[existing_mapping_col]
+                    .astype(str)
+                    .str.strip()
+                    .str.replace(".0", "", regex=False)
+                )
+
+            mapping_lookup = mapping_df[
+                [mapping_key_col, declaring_code_col]
             ].copy()
 
-            hq_lookup.rename(
-                columns={hq_mapping_return_col: "LPR Reporting Code"},
-                inplace=True
+            mapping_lookup.rename(columns={
+                mapping_key_col: "Mapping Key",
+                declaring_code_col: "Declaring Code"
+            }, inplace=True)
+
+            mapping_lookup["Mapping Key"] = (
+                mapping_lookup["Mapping Key"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
             )
 
-            hq_lookup = hq_lookup.drop_duplicates(
-                subset=["HQ Address Match Key"],
+            mapping_lookup["Declaring Code"] = (
+                mapping_lookup["Declaring Code"]
+                .astype(str)
+                .str.strip()
+            )
+
+            mapping_lookup = mapping_lookup.drop_duplicates(
+                subset=["Mapping Key"],
                 keep="first"
             )
 
             work_df = work_df.merge(
-                hq_lookup,
-                on="HQ Address Match Key",
+                mapping_lookup,
+                on="Mapping Key",
                 how="left"
             )
 
