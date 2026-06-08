@@ -17,8 +17,12 @@ business_unit_map = {
     "Netherlands": {"Sender Name": "Netherlands", "Sender Location Id": "C6960"},
     "Spain": {"Sender Name": "Spain", "Sender Location Id": "C14430"},
     "HQ": {"Sender Name": "HQ", "Sender Location Id": "C18571"},
-    "Coca-Cola HBC Northern Ireland Ltd": {"Sender Name": "Coca-Cola HBC Northern Ireland Ltd", "Sender Location Id": "16928"}
+    "Coca-Cola HBC Northern Ireland Ltd": {
+        "Sender Name": "Coca-Cola HBC Northern Ireland Ltd",
+        "Sender Location Id": "16928"
+    }
 }
+
 
 # =========================
 # FUNCTIONS
@@ -42,7 +46,6 @@ def convert_date_to_ddmmyyyy(value):
         if value_str.endswith(".0"):
             value_str = value_str[:-2]
 
-        # Handles 20260427
         if value_str.isdigit() and len(value_str) == 8:
             return pd.Timestamp(
                 year=int(value_str[0:4]),
@@ -50,11 +53,9 @@ def convert_date_to_ddmmyyyy(value):
                 day=int(value_str[6:8])
             )
 
-        # Handles 270426
         if value_str.isdigit() and len(value_str) == 6:
             return pd.to_datetime(value_str, format="%d%m%y", errors="coerce")
 
-        # Handles Excel serial date like 46139
         if value_str.isdigit() and len(value_str) == 5:
             return pd.to_datetime(
                 int(value_str),
@@ -63,7 +64,6 @@ def convert_date_to_ddmmyyyy(value):
                 errors="coerce"
             )
 
-        # Handles 2026-04-27 or 2026/04/27
         if len(value_str) >= 10:
             date_part = value_str[:10]
 
@@ -90,46 +90,6 @@ def convert_date_to_ddmmyyyy(value):
     except Exception:
         return pd.NaT
 
-    # Handles Excel serial stored as text
-    if value_str.isdigit():
-        number = int(value_str)
-
-        if number > 1000:
-            return pd.to_datetime(
-                number,
-                unit="D",
-                origin="1899-12-30",
-                errors="coerce"
-            )
-
-    # Handles 2026-05-01 or 2026/05/01
-    if len(value_str) >= 10:
-        date_part = value_str[:10]
-
-        if "-" in date_part:
-            parts = date_part.split("-")
-            if len(parts) == 3 and len(parts[0]) == 4:
-                return pd.Timestamp(
-                    year=int(parts[0]),
-                    month=int(parts[1]),
-                    day=int(parts[2])
-                )
-
-        if "/" in date_part:
-            parts = date_part.split("/")
-            if len(parts) == 3 and len(parts[0]) == 4:
-                return pd.Timestamp(
-                    year=int(parts[0]),
-                    month=int(parts[1]),
-                    day=int(parts[2])
-                )
-
-    return pd.to_datetime(
-        value_str,
-        errors="coerce",
-        dayfirst=True
-    )
-
 
 def clean_reference_number(value):
     value = str(value).strip()
@@ -142,11 +102,11 @@ def clean_reference_number(value):
 
     return value
 
+
 def clean_concat_part(value):
     if pd.isna(value):
         return ""
 
-    # If Excel/Pandas reads 005 as number 5 or 5.0
     if isinstance(value, (int, float, np.integer, np.floating)):
         if float(value).is_integer():
             return str(int(value)).zfill(3)
@@ -161,18 +121,22 @@ def clean_concat_part(value):
 
     return value
 
+
+def clean_code(value):
+    if pd.isna(value):
+        return ""
+
     value = str(value).strip()
 
-    # Remove .0 from numbers read by Excel
-    if value.endswith(".0") and value[:-2].isdigit():
+    if value.endswith(".0"):
         value = value[:-2]
 
-    # Preserve leading zeros for 3-digit numbers
-    if value.isdigit() and len(value) == 3:
-        value = value.zfill(4)
+    if value.lower() in ["nan", "none"]:
+        return ""
 
     return value
-    
+
+
 def working_days(start, end):
     if pd.isna(start):
         return np.nan
@@ -283,7 +247,7 @@ main_file = st.file_uploader(
 )
 
 mapping_file = st.file_uploader(
-    "Upload LPR Matching Table",
+    "Upload LPR Matching Table - only needed if LPR code is not already in main file",
     type=["xlsx"]
 )
 
@@ -291,9 +255,11 @@ hq_mapping_file = None
 
 if business_unit == "HQ":
     hq_mapping_file = st.file_uploader(
-        "Upload HQ Location Mapping Table",
+        "Upload HQ Location Mapping Table - only needed if using LPR Matching Table",
         type=["xlsx"]
     )
+
+
 if main_file:
 
     df = pd.read_excel(main_file)
@@ -323,6 +289,17 @@ if main_file:
         ]
     )
 
+    selected_concat_cols = []
+    existing_mapping_col = None
+    mapping_key_col = None
+    declaring_code_col = None
+    lpr_code_col = None
+
+    main_address_col = None
+    hq_address_col = None
+    hq_mapping_return_col = None
+    hq_mapping_df = None
+
     if code_source == "Already in Main File":
         lpr_code_col = st.selectbox(
             "Which is your LPR code column?",
@@ -334,25 +311,49 @@ if main_file:
             st.error("Please upload LPR Matching Table.")
             st.stop()
 
-        st.subheader("Create Location ID / Mapping Key")
+        if business_unit == "HQ":
+            if hq_mapping_file is None:
+                st.error("Please upload HQ Location Mapping Table.")
+                st.stop()
 
-        concatenate_required = st.radio(
-            "Do you want to concatenate columns to create Location ID / Mapping Key?",
-            ["Yes", "No"]
-        )
+            hq_mapping_df = pd.read_excel(hq_mapping_file)
+            hq_mapping_df = clean_columns(hq_mapping_df)
 
-        selected_concat_cols = []
+            st.subheader("HQ Address Mapping")
 
-        if concatenate_required == "Yes":
-            selected_concat_cols = st.multiselect(
-                "Select columns to concatenate in order",
+            main_address_col = st.selectbox(
+                "Select Address Line 1 column from Main File",
                 main_columns
             )
+
+            hq_address_col = st.selectbox(
+                "Select Address1 column from HQ Mapping Table",
+                hq_mapping_df.columns.tolist()
+            )
+
+            hq_mapping_return_col = st.selectbox(
+                "Select column from HQ Mapping Table to use for LPR Matching",
+                hq_mapping_df.columns.tolist()
+            )
+
         else:
-            existing_mapping_col = st.selectbox(
-                "Select existing Location ID / Mapping Key column",
-                main_columns
+            st.subheader("Create Location ID / Mapping Key")
+
+            concatenate_required = st.radio(
+                "Do you want to concatenate columns to create Location ID / Mapping Key?",
+                ["Yes", "No"]
             )
+
+            if concatenate_required == "Yes":
+                selected_concat_cols = st.multiselect(
+                    "Select columns to concatenate in order",
+                    main_columns
+                )
+            else:
+                existing_mapping_col = st.selectbox(
+                    "Select existing Location ID / Mapping Key column",
+                    main_columns
+                )
 
         st.subheader("Map LPR Matching Table Columns")
 
@@ -365,34 +366,98 @@ if main_file:
             "Select LPR Declaring Code column in LPR Matching Table",
             mapping_df.columns.tolist()
         )
-        if code_source == "Already in Main File":
-            work_df["Mapping Key"] = (
-                work_df[lpr_code_col]
-                .astype(str)
-                .str.strip()
-                .str.replace(".0", "", regex=False)
-            )
 
+    if st.button("Prepare Data"):
+
+        if not batch_number:
+            st.error("Please enter Batch Number.")
+            st.stop()
+
+        work_df = df.copy()
+
+        work_df["Movement Date Parsed"] = work_df[date_col].apply(convert_date_to_ddmmyyyy)
+        work_df["Movement Date"] = work_df["Movement Date Parsed"].dt.strftime("%d/%m/%Y")
+
+        work_df["Receiver"] = work_df[receiver_col].astype(str).str.strip()
+
+        work_df["Reference"] = work_df[reference_col].apply(clean_reference_number)
+
+        work_df["Quantity"] = pd.to_numeric(
+            work_df[quantity_col],
+            errors="coerce"
+        ).fillna(0)
+
+        work_df = work_df[
+            work_df["Quantity"] != 0
+        ].copy()
+
+        if code_source == "Already in Main File":
+
+            work_df["Mapping Key"] = work_df[lpr_code_col].apply(clean_code)
             work_df["Declaring Code"] = work_df["Mapping Key"]
 
         else:
-            if concatenate_required == "Yes":
-                if not selected_concat_cols:
-                    st.error("Please select columns to concatenate.")
-                    st.stop()
 
-                work_df["Mapping Key"] = ""
+            if business_unit == "HQ":
 
-                for col in selected_concat_cols:
-                    work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
-
-            else:
-                work_df["Mapping Key"] = (
-                    work_df[existing_mapping_col]
+                work_df["HQ Address Match Key"] = (
+                    work_df[main_address_col]
                     .astype(str)
                     .str.strip()
-                    .str.replace(".0", "", regex=False)
+                    .str.upper()
                 )
+
+                hq_mapping_df["HQ Address Match Key"] = (
+                    hq_mapping_df[hq_address_col]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                )
+
+                hq_lookup = hq_mapping_df[
+                    ["HQ Address Match Key", hq_mapping_return_col]
+                ].copy()
+
+                hq_lookup.rename(
+                    columns={hq_mapping_return_col: "LPR Reporting Code"},
+                    inplace=True
+                )
+
+                hq_lookup = hq_lookup.drop_duplicates(
+                    subset=["HQ Address Match Key"],
+                    keep="first"
+                )
+
+                work_df = work_df.merge(
+                    hq_lookup,
+                    on="HQ Address Match Key",
+                    how="left"
+                )
+
+                work_df["Mapping Key"] = (
+                    work_df["LPR Reporting Code"]
+                    .apply(clean_code)
+                    .str.upper()
+                )
+
+            else:
+
+                if concatenate_required == "Yes":
+                    if not selected_concat_cols:
+                        st.error("Please select columns to concatenate.")
+                        st.stop()
+
+                    work_df["Mapping Key"] = ""
+
+                    for col in selected_concat_cols:
+                        work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
+
+                else:
+                    work_df["Mapping Key"] = (
+                        work_df[existing_mapping_col]
+                        .apply(clean_code)
+                        .str.upper()
+                    )
 
             mapping_lookup = mapping_df[
                 [mapping_key_col, declaring_code_col]
@@ -405,15 +470,13 @@ if main_file:
 
             mapping_lookup["Mapping Key"] = (
                 mapping_lookup["Mapping Key"]
-                .astype(str)
-                .str.strip()
+                .apply(clean_code)
                 .str.upper()
             )
 
             mapping_lookup["Declaring Code"] = (
                 mapping_lookup["Declaring Code"]
-                .astype(str)
-                .str.strip()
+                .apply(clean_code)
             )
 
             mapping_lookup = mapping_lookup.drop_duplicates(
@@ -421,75 +484,16 @@ if main_file:
                 keep="first"
             )
 
+            before_rows = len(work_df)
+
             work_df = work_df.merge(
                 mapping_lookup,
                 on="Mapping Key",
                 how="left"
             )
 
-            work_df["Mapping Key"] = (
-                work_df["LPR Reporting Code"]
-                .astype(str)
-                .str.strip()
-                .str.upper()
-            )
+            st.info(f"Rows before LPR lookup: {before_rows}")
 
-        else:
-            if concatenate_required == "Yes":
-                if not selected_concat_cols:
-                    st.error("Please select columns to concatenate.")
-                    st.stop()
-
-                work_df["Mapping Key"] = ""
-
-                for col in selected_concat_cols:
-                    work_df["Mapping Key"] += work_df[col].apply(clean_concat_part)
-
-            else:
-                work_df["Mapping Key"] = (
-                    work_df[existing_mapping_col]
-                    .astype(str)
-                    .str.strip()
-                    .str.replace(".0", "", regex=False)
-                )
-
-        mapping_lookup = mapping_df[
-            [mapping_key_col, declaring_code_col]
-        ].copy()
-
-        mapping_lookup.rename(columns={
-            mapping_key_col: "Mapping Key",
-            declaring_code_col: "Declaring Code"
-        }, inplace=True)
-
-        mapping_lookup["Mapping Key"] = (
-            mapping_lookup["Mapping Key"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-        mapping_lookup["Declaring Code"] = (
-            mapping_lookup["Declaring Code"]
-            .astype(str)
-            .str.strip()
-        )
-
-        mapping_lookup = mapping_lookup.drop_duplicates(
-            subset=["Mapping Key"],
-            keep="first"
-        )
-
-        before_rows = len(work_df)
-
-        work_df = work_df.merge(
-            mapping_lookup,
-            on="Mapping Key",
-            how="left"
-        )     
-
-        st.info(f"Rows before LPR lookup: {before_rows}")
-        
         today = pd.Timestamp.today().normalize()
 
         work_df["Working Days Old"] = work_df["Movement Date Parsed"].apply(
@@ -501,9 +505,7 @@ if main_file:
         work_df.loc[
             work_df["Working Days Old"] > 29,
             "Comments"
-        ] = (
-            "OVERDUE: Movement exceeds 29 working days"
-        )
+        ] = "OVERDUE: Movement exceeds 29 working days"
 
         st.session_state["lpr_work_df"] = work_df
 
