@@ -365,7 +365,7 @@ if main_file:
             "Select LPR Declaring Code column in LPR Matching Table",
             mapping_df.columns.tolist()
         )
-            if code_source == "Already in Main File":
+        if code_source == "Already in Main File":
             work_df["Mapping Key"] = (
                 work_df[lpr_code_col]
                 .astype(str)
